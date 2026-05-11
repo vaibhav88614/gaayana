@@ -20,6 +20,8 @@ class GaayanaApp extends ConsumerWidget {
     final firebaseReady = ref.watch(firebaseReadyProvider);
     final auth = ref.watch(authStateProvider);
     final themeMode = ref.watch(themeModeProvider);
+    // Activate the play-history recorder.
+    ref.watch(playHistoryRecorderProvider);
 
     return DynamicColorGate(
       builder: (light, dark) => MaterialApp(

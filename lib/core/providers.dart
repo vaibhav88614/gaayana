@@ -128,6 +128,20 @@ final queueProvider = StreamProvider((ref) {
   return ref.watch(audioHandlerProvider).queueTracks;
 });
 
+/// Watches the current-track stream and records a play row each time the
+/// track changes. Side-effect provider — must be `read` once at app start.
+final playHistoryRecorderProvider = Provider<void>((ref) {
+  final db = ref.watch(databaseProvider);
+  String? lastRecorded;
+  ref.listen<AsyncValue<dynamic>>(currentTrackProvider, (prev, next) {
+    final t = next.valueOrNull;
+    if (t == null) return;
+    if (t.globalId == lastRecorded) return;
+    lastRecorded = t.globalId;
+    db.recordPlay(t.globalId);
+  });
+});
+
 final loopModeProvider = StreamProvider((ref) {
   return ref.watch(audioHandlerProvider).loopMode;
 });

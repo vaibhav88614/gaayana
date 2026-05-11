@@ -22,9 +22,18 @@ ImageProvider? trackArtwork(Track? t, {int size = 256}) {
 }
 
 class AlbumArt extends StatelessWidget {
-  const AlbumArt({required this.track, this.size = 56, super.key});
+  const AlbumArt({
+    required this.track,
+    this.size = 56,
+    this.heroTag,
+    super.key,
+  });
   final Track? track;
   final double size;
+
+  /// If non-null, wraps the art in a [Hero] for smooth shared-element
+  /// transitions between mini-player and now-playing.
+  final Object? heroTag;
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +45,7 @@ class AlbumArt extends StatelessWidget {
       child: Icon(Icons.music_note,
           size: size * 0.5, color: scheme.onPrimaryContainer),
     );
-    return ClipRRect(
+    Widget art = ClipRRect(
       borderRadius: BorderRadius.circular(size * 0.12),
       child: SizedBox(
         width: size,
@@ -51,5 +60,9 @@ class AlbumArt extends StatelessWidget {
             : placeholder,
       ),
     );
+    if (heroTag != null) {
+      art = Hero(tag: heroTag!, child: art);
+    }
+    return art;
   }
 }

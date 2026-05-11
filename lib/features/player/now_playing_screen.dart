@@ -58,19 +58,27 @@ class NowPlayingScreen extends ConsumerWidget {
               children: [
                 _topBar(context, route),
                 const Spacer(),
-                AlbumArt(track: track, size: 320),
+                AlbumArt(track: track, size: 320, heroTag: 'nowPlayingArt'),
                 const SizedBox(height: 32),
-                Text(track.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(track.title,
+                      key: ValueKey<String>('t-${track.globalId}'),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .headlineSmall
+                          ?.copyWith(fontWeight: FontWeight.w700)),
+                ),
                 const SizedBox(height: 6),
-                Text(track.artist,
-                    style: TextStyle(color: scheme.onSurfaceVariant)),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Text(track.artist,
+                      key: ValueKey<String>('a-${track.globalId}'),
+                      style: TextStyle(color: scheme.onSurfaceVariant)),
+                ),
                 const SizedBox(height: 24),
                 _scrubber(handler, position, duration),
                 const SizedBox(height: 8),
@@ -162,7 +170,17 @@ class NowPlayingScreen extends ConsumerWidget {
         ),
         IconButton.filled(
           iconSize: 48,
-          icon: Icon(playing ? Icons.pause : Icons.play_arrow),
+          icon: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 220),
+            transitionBuilder: (child, anim) => ScaleTransition(
+              scale: anim,
+              child: FadeTransition(opacity: anim, child: child),
+            ),
+            child: Icon(
+              playing ? Icons.pause : Icons.play_arrow,
+              key: ValueKey<bool>(playing),
+            ),
+          ),
           onPressed: () => playing ? handler.pause() : handler.play(),
         ),
         IconButton.filledTonal(

@@ -85,12 +85,45 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
     final playing = player.playing;
     playbackState.add(playbackState.value.copyWith(
       controls: [
-        MediaControl.skipToPrevious,
-        if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
-        MediaControl.skipToNext,
+        const MediaControl(
+          androidIcon: 'drawable/ic_notif_skip_previous',
+          label: 'Previous',
+          action: MediaAction.skipToPrevious,
+        ),
+        if (playing)
+          const MediaControl(
+            androidIcon: 'drawable/ic_notif_pause',
+            label: 'Pause',
+            action: MediaAction.pause,
+          )
+        else
+          const MediaControl(
+            androidIcon: 'drawable/ic_notif_play',
+            label: 'Play',
+            action: MediaAction.play,
+          ),
+        const MediaControl(
+          androidIcon: 'drawable/ic_notif_stop',
+          label: 'Stop',
+          action: MediaAction.stop,
+        ),
+        const MediaControl(
+          androidIcon: 'drawable/ic_notif_skip_next',
+          label: 'Next',
+          action: MediaAction.skipToNext,
+        ),
       ],
-      systemActions: const {MediaAction.seek},
+      systemActions: const {
+        MediaAction.play,
+        MediaAction.pause,
+        MediaAction.playPause,
+        MediaAction.seek,
+        MediaAction.seekForward,
+        MediaAction.seekBackward,
+        MediaAction.skipToNext,
+        MediaAction.skipToPrevious,
+        MediaAction.stop,
+      },
       androidCompactActionIndices: const [0, 1, 3],
       processingState: const {
         ja.ProcessingState.idle: AudioProcessingState.idle,

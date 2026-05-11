@@ -22,15 +22,28 @@ class MiniPlayer extends ConsumerWidget {
     return Material(
       color: scheme.surfaceContainerHighest,
       child: InkWell(
-        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => const NowPlayingScreen(),
+        onTap: () => Navigator.of(context).push(PageRouteBuilder(
+          opaque: true,
+          transitionDuration: const Duration(milliseconds: 320),
+          reverseTransitionDuration: const Duration(milliseconds: 260),
+          pageBuilder: (_, anim, __) => FadeTransition(
+            opacity: anim,
+            child: const NowPlayingScreen(),
+          ),
+          transitionsBuilder: (_, anim, __, child) {
+            final slide = Tween<Offset>(
+              begin: const Offset(0, 0.08),
+              end: Offset.zero,
+            ).animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic));
+            return SlideTransition(position: slide, child: child);
+          },
         )),
         child: SizedBox(
           height: 64,
           child: Row(
             children: [
               const SizedBox(width: 8),
-              AlbumArt(track: track, size: 48),
+              AlbumArt(track: track, size: 48, heroTag: 'nowPlayingArt'),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

@@ -29,8 +29,9 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
       setState(() => _loading = false);
       return;
     }
+    setState(() => _loading = true);
     final r = await ref.read(lrclibClientProvider).fetch(
-          trackName: track.title,
+          trackName: _stripTags(track.title),
           artistName: track.artist,
           albumName: track.album,
           durationSeconds: track.durationMs ~/ 1000,
@@ -43,9 +44,20 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
     });
   }
 
+  String _stripTags(String s) {
+    // Drop "(Official Video)", "[Lyrics]", "feat. ...", file extensions, etc.
+    return s
+        .replaceAll(RegExp(r'\.(mp3|m4a|aac|ogg|flac|wav)$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s*[\(\[][^)\]]*[\)\]]\s*'), ' ')
+        .replaceAll(RegExp(r'\s+feat\.?\s+.*$', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+  }
+
   @override
   Widget build(BuildContext context) {
     final position = ref.watch(positionProvider).valueOrNull ?? Duration.zero;
+    final track = ref.watch(currentTrackProvider).valueOrNull;
     final scheme = Theme.of(context).colorScheme;
 
     int activeIndex = -1;
@@ -54,11 +66,42 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Lyrics')),
+      appBar: AppBar(
+        title: Text(track == null ? 'Lyrics' : '${track.title} — Lyrics',
+            overflow: TextOverflow.ellipsis),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            icon: const Icon(Icons.refresh),
+            onPressed: _load,
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _lines.isEmpty && (_plain ?? '').isEmpty
-              ? const Center(child: Text('No lyrics found.'))
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.lyrics_outlined,
+                            size: 64, color: scheme.onSurfaceVariant),
+                        const SizedBox(height: 12),
+                        Text('No lyrics found',
+                            style: Theme.of(context).textTheme.titleMedium),
+                        const SizedBox(height: 8),
+                        Text(
+                          'LRCLIB has no match for "${track?.title ?? '?'}" by ${track?.artist ?? '?'}.\n'
+                          'Check that the track metadata is correct.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : _lines.isNotEmpty
                   ? ListView.builder(
                       controller: _scroll,
@@ -67,27 +110,32 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
                       itemCount: _lines.length,
                       itemBuilder: (_, i) {
                         final active = i == activeIndex;
-                        return Padding(
+                        return AnimatedContainer(
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
                           padding: const EdgeInsets.symmetric(vertical: 6),
-                          child: Text(
-                            _lines[i].text,
-                            textAlign: TextAlign.center,
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeOutCubic,
                             style: TextStyle(
-                              fontSize: active ? 22 : 18,
+                              fontSize: active ? 22 : 16,
                               fontWeight:
                                   active ? FontWeight.w700 : FontWeight.w400,
                               color: active
                                   ? scheme.primary
-                                  : scheme.onSurfaceVariant,
+                                  : scheme.onSurfaceVariant
+                                      .withValues(alpha: 0.7),
                             ),
+                            child: Text(_lines[i].text,
+                                textAlign: TextAlign.center),
                           ),
                         );
                       },
                     )
                   : SingleChildScrollView(
                       padding: const EdgeInsets.all(24),
-                      child:
-                          Text(_plain ?? '', style: const TextStyle(fontSize: 16)),
+                      child: Text(_plain ?? '',
+                          style: const TextStyle(fontSize: 16, height: 1.5)),
                     ),
     );
   }
