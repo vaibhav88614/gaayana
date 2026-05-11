@@ -4,6 +4,16 @@ A Flutter (Android + iOS) music player inspired by Apple Music / JioSaavn / Spot
 
 A pre-built release APK is committed at [`Gaayana.apk`](Gaayana.apk) (arm64 + armv7 + x86_64 fat APK, ~56 MB).
 
+**Setting up on a new machine?** See [docs/SETUP.md](docs/SETUP.md). TL;DR after installing Flutter + Android Studio + Git LFS:
+
+```powershell
+git clone https://github.com/vaibhav88614/gaayana.git
+cd gaayana
+pwsh -ExecutionPolicy Bypass -File tool\setup.ps1
+flutter run
+```
+
+
 - Background playback + lock-screen / notification controls
 - Bluetooth & headset detection with auto-route switching
 - Offline downloads, sleep timer with fade-out
