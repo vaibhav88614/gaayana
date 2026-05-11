@@ -1,0 +1,50 @@
+# Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+.idea/
+*.iml
+.vscode/
+
+# Generated
+**/*.g.dart
+**/*.freezed.dart
+
+# Platform
+android/.gradle/
+android/local.properties
+android/app/google-services.json
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Runner/GoogleService-Info.plist
+
+# Env
+.env
+.env.local
+
+# Secrets / signing
+*.keystore
+*.jks
+android/key.properties
+lib/firebase_options.dart
+
+# Dev screenshots
+gaayana_home.png
+gaayana_app.png
+gaayana_drawer.png
+gaayana_launcher.png
+theme*.png
+
+# Embedded Flutter SDK clone (do not commit)
+flutter/
+
+# Android Kotlin compiler caches/logs
+android/.kotlin/
+platform_overrides/
+

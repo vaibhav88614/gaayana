@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7C3AED"/>
+      <stop offset="0.55" stop-color="#5B21B6"/>
+      <stop offset="1" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="note" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FDE68A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded background -->
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="220" ry="220" fill="url(#glow)"/>
+
+  <!-- Sound wave arcs (left side) -->
+  <g fill="none" stroke="#FDE68A" stroke-linecap="round" opacity="0.85">
+    <path d="M 250 512 Q 200 512 200 462" stroke-width="34"/>
+    <path d="M 200 412 Q 200 512 200 612" stroke-width="34"/>
+    <path d="M 130 360 Q 130 512 130 664" stroke-width="34" opacity="0.55"/>
+  </g>
+
+  <!-- Sound wave arcs (right side, mirrored) -->
+  <g fill="none" stroke="#FDE68A" stroke-linecap="round" opacity="0.85">
+    <path d="M 774 512 Q 824 512 824 462" stroke-width="34"/>
+    <path d="M 824 412 Q 824 512 824 612" stroke-width="34"/>
+    <path d="M 894 360 Q 894 512 894 664" stroke-width="34" opacity="0.55"/>
+  </g>
+
+  <!-- Musical note: stem + flag + head -->
+  <g fill="url(#note)">
+    <!-- stem -->
+    <rect x="556" y="280" width="40" height="380" rx="12"/>
+    <!-- flag -->
+    <path d="M 596 280
+             C 700 320, 740 410, 660 470
+             C 720 420, 690 360, 596 360
+             Z"/>
+    <!-- note head -->
+    <ellipse cx="496" cy="668" rx="92" ry="64" transform="rotate(-18 496 668)"/>
+  </g>
+
+  <!-- Subtle ground reflection -->
+  <ellipse cx="512" cy="860" rx="240" ry="22" fill="#000" opacity="0.18"/>
+</svg>
