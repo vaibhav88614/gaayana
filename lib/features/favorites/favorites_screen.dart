@@ -30,6 +30,21 @@ class _FavoritesScreenState extends ConsumerState<FavoritesScreen> {
     final handler = ref.read(audioHandlerProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Favorites')),
+      floatingActionButton: FutureBuilder<List<Track>>(
+        future: _future,
+        builder: (_, snap) {
+          final list = snap.data ?? const <Track>[];
+          if (list.isEmpty) return const SizedBox.shrink();
+          return FloatingActionButton.extended(
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Play all'),
+            onPressed: () async {
+              await handler.setQueue(list, initialIndex: 0);
+              await handler.play();
+            },
+          );
+        },
+      ),
       body: FutureBuilder<List<Track>>(
         future: _future,
         builder: (_, snap) {

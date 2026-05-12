@@ -65,6 +65,44 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
     final session = await AudioSession.instance;
     await session.configure(const AudioSessionConfiguration.music());
 
+    // Resume after a transient audio-focus loss (e.g. user watches an
+    // Instagram reel / YouTube short and comes back).
+    session.interruptionEventStream.listen((event) async {
+      if (event.begin) {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            // Lower volume while the other app plays.
+            await player.setVolume(0.3);
+            break;
+          case AudioInterruptionType.pause:
+          case AudioInterruptionType.unknown:
+            if (player.playing) {
+              _wasPlayingBeforeInterruption = true;
+              await player.pause();
+            }
+            break;
+        }
+      } else {
+        switch (event.type) {
+          case AudioInterruptionType.duck:
+            await player.setVolume(1.0);
+            break;
+          case AudioInterruptionType.pause:
+          case AudioInterruptionType.unknown:
+            if (_wasPlayingBeforeInterruption) {
+              _wasPlayingBeforeInterruption = false;
+              await player.play();
+            }
+            break;
+        }
+      }
+    });
+
+    // Pause when headphones unplug / Bluetooth disconnects.
+    session.becomingNoisyEventStream.listen((_) {
+      if (player.playing) player.pause();
+    });
+
     player.playbackEventStream.listen(_broadcastState,
         onError: (Object e, StackTrace s) {
       playbackState.add(playbackState.value
@@ -80,6 +118,8 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
 
     _wireCrossfade();
   }
+
+  bool _wasPlayingBeforeInterruption = false;
 
   void _broadcastState(ja.PlaybackEvent event) {
     final playing = player.playing;

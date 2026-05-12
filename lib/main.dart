@@ -44,8 +44,14 @@ Future<void> main() async {
     config: const AudioServiceConfig(
       androidNotificationChannelId: 'com.gaayana.audio',
       androidNotificationChannelName: 'Gaayana playback',
-      androidNotificationOngoing: true,
-      androidStopForegroundOnPause: true,
+      // Notification is dismissable when paused so users aren't stuck with a
+      // persistent badge. It re-appears as soon as playback resumes.
+      androidNotificationOngoing: false,
+      androidStopForegroundOnPause: false,
+      // Tapping the notification body returns to the running activity rather
+      // than launching a fresh one.
+      androidResumeOnClick: true,
+      androidShowNotificationBadge: true,
       androidNotificationIcon: 'mipmap/ic_launcher',
     ),
   );

@@ -40,6 +40,16 @@ class NowPlayingScreen extends ConsumerWidget {
             Navigator.maybePop(context);
           }
         },
+        onHorizontalDragEnd: (details) {
+          final v = details.primaryVelocity ?? 0;
+          if (v > 200) {
+            // Swipe right → next song
+            handler.skipToNext();
+          } else if (v < -200) {
+            // Swipe left → previous song
+            handler.skipToPrevious();
+          }
+        },
         child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -140,7 +150,12 @@ class NowPlayingScreen extends ConsumerWidget {
         IconButton(
           icon: const Icon(Icons.queue_music),
           tooltip: 'Up next',
-          onPressed: () {}, // TODO: show queue
+          onPressed: () => showModalBottomSheet<void>(
+            context: context,
+            showDragHandle: true,
+            isScrollControlled: true,
+            builder: (_) => const _QueueSheet(),
+          ),
         ),
       ],
     );
@@ -199,23 +214,20 @@ class NowPlayingScreen extends ConsumerWidget {
       LoopMode.one => Icons.repeat_one,
       LoopMode.all => Icons.repeat,
     };
-    final loopColor = loop == LoopMode.off
-        ? Theme.of(context).colorScheme.onSurfaceVariant
-        : Theme.of(context).colorScheme.primary;
+    final sleepActive = ref.watch(sleepTimerProvider).isActive;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
-        IconButton(
+        _ToggleIconButton(
           tooltip: 'Shuffle',
-          icon: Icon(Icons.shuffle,
-              color: shuffle
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.onSurfaceVariant),
+          icon: Icons.shuffle,
+          active: shuffle,
           onPressed: () => handler.setShuffleEnabled(!shuffle),
         ),
-        IconButton(
+        _ToggleIconButton(
           tooltip: 'Loop',
-          icon: Icon(loopIcon, color: loopColor),
+          icon: loopIcon,
+          active: loop != LoopMode.off,
           onPressed: () {
             final next = switch (loop) {
               LoopMode.off => LoopMode.all,
@@ -230,9 +242,10 @@ class NowPlayingScreen extends ConsumerWidget {
           icon: const Icon(Icons.lyrics_outlined),
           onPressed: () => Navigator.of(context).pushNamed('/lyrics'),
         ),
-        IconButton(
+        _ToggleIconButton(
           tooltip: 'Sleep timer',
-          icon: const Icon(Icons.bedtime_outlined),
+          icon: Icons.bedtime_outlined,
+          active: sleepActive,
           onPressed: () => showModalBottomSheet<void>(
             context: context,
             showDragHandle: true,
@@ -258,5 +271,112 @@ class NowPlayingScreen extends ConsumerWidget {
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
     final h = d.inHours;
     return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+}
+
+/// IconButton that visibly highlights when [active] is true. Designed to look
+/// good across light, dark and system themes — uses a filled tonal background
+/// for the "on" state instead of a bare colour change.
+class _ToggleIconButton extends StatelessWidget {
+  const _ToggleIconButton({
+    required this.icon,
+    required this.active,
+    required this.onPressed,
+    required this.tooltip,
+  });
+  final IconData icon;
+  final bool active;
+  final VoidCallback onPressed;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOutCubic,
+        margin: const EdgeInsets.symmetric(horizontal: 2),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: active
+              ? scheme.primary.withValues(alpha: 0.22)
+              : Colors.transparent,
+        ),
+        child: IconButton(
+          icon: Icon(
+            icon,
+            color: active ? scheme.primary : scheme.onSurfaceVariant,
+          ),
+          onPressed: onPressed,
+        ),
+      ),
+    );
+  }
+}
+
+/// Bottom-sheet showing the active queue with tap-to-jump.
+class _QueueSheet extends ConsumerWidget {
+  const _QueueSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final queue = ref.watch(queueProvider).valueOrNull ?? const <Track>[];
+    final current = ref.watch(currentTrackProvider).valueOrNull;
+    final handler = ref.read(audioHandlerProvider);
+    final scheme = Theme.of(context).colorScheme;
+
+    return DraggableScrollableSheet(
+      expand: false,
+      initialChildSize: 0.6,
+      maxChildSize: 0.95,
+      minChildSize: 0.4,
+      builder: (_, controller) => Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              children: [
+                Text('Up next',
+                    style: Theme.of(context).textTheme.titleLarge),
+                const Spacer(),
+                Text('${queue.length} songs',
+                    style: TextStyle(color: scheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView.builder(
+              controller: controller,
+              itemCount: queue.length,
+              itemBuilder: (_, i) {
+                final t = queue[i];
+                final selected = current?.globalId == t.globalId;
+                return ListTile(
+                  selected: selected,
+                  selectedTileColor:
+                      scheme.primaryContainer.withValues(alpha: 0.4),
+                  leading: AlbumArt(track: t, size: 40),
+                  title: Text(t.title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(t.artist,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  trailing: selected
+                      ? Icon(Icons.equalizer, color: scheme.primary)
+                      : null,
+                  onTap: () async {
+                    await handler.skipToQueueItem(i);
+                    await handler.play();
+                    if (context.mounted) Navigator.pop(context);
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

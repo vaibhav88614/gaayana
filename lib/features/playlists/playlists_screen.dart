@@ -87,7 +87,15 @@ class _PlaylistsScreenState extends ConsumerState<PlaylistsScreen> {
                 },
                 trailing: PopupMenuButton<String>(
                   onSelected: (v) async {
-                    if (v == 'rename') {
+                    if (v == 'play') {
+                      final tracks = await ref
+                          .read(databaseProvider)
+                          .playlistTracks(p.id);
+                      if (tracks.isEmpty) return;
+                      final handler = ref.read(audioHandlerProvider);
+                      await handler.setQueue(tracks, initialIndex: 0);
+                      await handler.play();
+                    } else if (v == 'rename') {
                       final name = await _prompt('Rename playlist', p.name);
                       if (name != null) {
                         await ref
@@ -104,8 +112,33 @@ class _PlaylistsScreenState extends ConsumerState<PlaylistsScreen> {
                     }
                   },
                   itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'rename', child: Text('Rename')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    PopupMenuItem(
+                      value: 'play',
+                      child: ListTile(
+                        leading: Icon(Icons.play_arrow),
+                        title: Text('Play all'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'rename',
+                      child: ListTile(
+                        leading: Icon(Icons.edit),
+                        title: Text('Rename'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline),
+                        title: Text('Delete'),
+                        contentPadding: EdgeInsets.zero,
+                        dense: true,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -173,6 +206,21 @@ class _PlaylistDetailScreenState
     final handler = ref.read(audioHandlerProvider);
     return Scaffold(
       appBar: AppBar(title: Text(widget.playlist.name)),
+      floatingActionButton: FutureBuilder<List<Track>>(
+        future: _future,
+        builder: (_, snap) {
+          final list = snap.data ?? const <Track>[];
+          if (list.isEmpty) return const SizedBox.shrink();
+          return FloatingActionButton.extended(
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Play all'),
+            onPressed: () async {
+              await handler.setQueue(list, initialIndex: 0);
+              await handler.play();
+            },
+          );
+        },
+      ),
       body: FutureBuilder<List<Track>>(
         future: _future,
         builder: (_, snap) {
@@ -192,13 +240,56 @@ class _PlaylistDetailScreenState
                 await handler.setQueue(list, initialIndex: i);
                 await handler.play();
               },
-              onMore: () async {
-                await ref
-                    .read(databaseProvider)
-                    .removeFromPlaylist(
-                        widget.playlist.id, list[i].globalId);
-                _refresh();
-              },
+              trailing: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                onSelected: (v) async {
+                  switch (v) {
+                    case 'play':
+                      await handler.setQueue(list, initialIndex: i);
+                      await handler.play();
+                      break;
+                    case 'play_next':
+                      await handler.appendToQueue([list[i]]);
+                      break;
+                    case 'remove':
+                      await ref
+                          .read(databaseProvider)
+                          .removeFromPlaylist(
+                              widget.playlist.id, list[i].globalId);
+                      _refresh();
+                      break;
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'play',
+                    child: ListTile(
+                      leading: Icon(Icons.play_arrow),
+                      title: Text('Play'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'play_next',
+                    child: ListTile(
+                      leading: Icon(Icons.queue_play_next),
+                      title: Text('Add to queue'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: 'remove',
+                    child: ListTile(
+                      leading: Icon(Icons.playlist_remove),
+                      title: Text('Remove from playlist'),
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                    ),
+                  ),
+                ],
+              ),
             ),
           );
         },

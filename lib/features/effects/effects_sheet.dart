@@ -13,7 +13,7 @@ class EffectsSheet extends ConsumerStatefulWidget {
 
 class _EffectsSheetState extends ConsumerState<EffectsSheet> {
   static const presets = <String, List<double>>{
-    'Flat': [0, 0, 0, 0, 0],
+    'Normal': [0, 0, 0, 0, 0],
     'Bass boost': [10, 6, 0, -2, -3],
     'Treble boost': [-3, -2, 0, 6, 10],
     'Vocal': [-2, 0, 6, 4, 0],
@@ -23,7 +23,7 @@ class _EffectsSheetState extends ConsumerState<EffectsSheet> {
     'Classical': [4, 2, 0, 2, 4],
   };
 
-  String _activePreset = 'Flat';
+  String _activePreset = 'Normal';
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +109,11 @@ class _EffectsSheetState extends ConsumerState<EffectsSheet> {
   Future<void> _applyPreset(
       ja.AndroidEqualizer eq, List<double> bandGainsDb) async {
     try {
-      await eq.setEnabled(true);
+      final isNormal = bandGainsDb.every((g) => g == 0);
+      // For "Normal", disable the EQ entirely so the source signal passes
+      // through untouched. Otherwise enable and apply the band gains.
+      await eq.setEnabled(!isNormal);
+      if (isNormal) return;
       final params = await eq.parameters;
       for (var i = 0; i < params.bands.length && i < bandGainsDb.length; i++) {
         await params.bands[i].setGain(bandGainsDb[i]);
