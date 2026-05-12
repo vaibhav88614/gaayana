@@ -31,6 +31,7 @@ class _EffectsSheetState extends ConsumerState<EffectsSheet> {
     final speed = ref.watch(speedProvider).valueOrNull ?? 1.0;
     final pitch = ref.watch(pitchProvider).valueOrNull ?? 1.0;
     final crossfade = ref.watch(crossfadeProvider).valueOrNull ?? Duration.zero;
+    final bass = ref.watch(bassBoostProvider).valueOrNull ?? 0.0;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
@@ -62,6 +63,18 @@ class _EffectsSheetState extends ConsumerState<EffectsSheet> {
             ],
           ),
           const SizedBox(height: 20),
+
+          // Bass / Loudness boost
+          _Slider(
+            label: 'Bass / Loudness boost',
+            value: bass,
+            min: 0,
+            max: 12,
+            divisions: 12,
+            display: bass == 0 ? 'off' : '+${bass.toStringAsFixed(0)} dB',
+            onChanged: (v) => handler.setBassBoost(v),
+            onReset: () => handler.setBassBoost(0),
+          ),
 
           // Speed
           _Slider(

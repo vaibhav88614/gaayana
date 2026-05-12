@@ -22,16 +22,25 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   List<Track> _tracks = const [];
   List<Track> _recent = const [];
   List<Track> _mostPlayed = const [];
+  _SortBy _sortBy = _SortBy.title;
 
   @override
   void initState() {
     super.initState();
-    _tab = TabController(length: 6, vsync: this);
+    _tab = TabController(length: 7, vsync: this);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final prefs = ref.read(sharedPrefsProvider);
+      // Restore sort preference.
+      final stored = prefs.getString('library.sortBy');
+      if (stored != null) {
+        _sortBy = _SortBy.values.firstWhere(
+          (s) => s.name == stored,
+          orElse: () => _SortBy.title,
+        );
+      }
       // On the very first launch, force a scan so we prompt for the
       // READ_MEDIA_AUDIO / storage permission immediately and populate the
       // library before the user has to hunt for the refresh button.
-      final prefs = ref.read(sharedPrefsProvider);
       final firstRun = !(prefs.getBool('library.firstScanDone') ?? false);
       await _refresh(forceScan: firstRun);
       if (firstRun) await prefs.setBool('library.firstScanDone', true);
@@ -46,12 +55,40 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         final source = ref.read(musicSourceProvider);
         await source.listAll();
       }
-      _tracks = await db.allTracks();
+      _tracks = _applySort(await db.allTracks());
       _recent = await db.recentlyPlayed(limit: 100);
       _mostPlayed = await db.mostPlayed(limit: 100);
     } finally {
       if (mounted) setState(() => _scanning = false);
     }
+  }
+
+  List<Track> _applySort(List<Track> list) {
+    final out = [...list];
+    switch (_sortBy) {
+      case _SortBy.title:
+        out.sort((a, b) =>
+            a.title.toLowerCase().compareTo(b.title.toLowerCase()));
+      case _SortBy.artist:
+        out.sort((a, b) =>
+            a.artist.toLowerCase().compareTo(b.artist.toLowerCase()));
+      case _SortBy.album:
+        out.sort((a, b) =>
+            a.album.toLowerCase().compareTo(b.album.toLowerCase()));
+      case _SortBy.duration:
+        out.sort((a, b) => a.durationMs.compareTo(b.durationMs));
+      case _SortBy.year:
+        out.sort((a, b) => (b.year ?? 0).compareTo(a.year ?? 0));
+    }
+    return out;
+  }
+
+  void _setSort(_SortBy s) {
+    setState(() {
+      _sortBy = s;
+      _tracks = _applySort(_tracks);
+    });
+    ref.read(sharedPrefsProvider).setString('library.sortBy', s.name);
   }
 
   Future<void> _playFrom(int index) async {
@@ -67,6 +104,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         title: const Text('Library'),
         bottom: TabBar(
           controller: _tab,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Songs'),
             Tab(text: 'Recent'),
@@ -74,6 +112,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             Tab(text: 'Artists'),
             Tab(text: 'Albums'),
             Tab(text: 'Genres'),
+            Tab(text: 'Folders'),
           ],
         ),
         actions: [
@@ -81,6 +120,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             tooltip: 'Search',
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.of(context).pushNamed('/search'),
+          ),
+          PopupMenuButton<_SortBy>(
+            tooltip: 'Sort',
+            icon: const Icon(Icons.sort),
+            onSelected: _setSort,
+            itemBuilder: (_) => [
+              for (final s in _SortBy.values)
+                CheckedPopupMenuItem(
+                  value: s,
+                  checked: _sortBy == s,
+                  child: Text(s.label),
+                ),
+            ],
           ),
           _ThemeToggleButton(),
           IconButton(
@@ -98,6 +150,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               switch (v) {
                 case 'import':
                   _import();
+                case 'url':
+                  _openUrl();
                 case 'playlists':
                   Navigator.of(context).pushNamed('/playlists');
                 case 'favorites':
@@ -110,6 +164,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'import', child: Text('Import files…')),
+              PopupMenuItem(value: 'url', child: Text('Open stream URL…')),
               PopupMenuItem(value: 'playlists', child: Text('Playlists')),
               PopupMenuItem(value: 'favorites', child: Text('Favorites')),
               PopupMenuItem(value: 'downloads', child: Text('Downloads')),
@@ -132,6 +187,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 _groupedTab((t) => t.artist),
                 _groupedTab((t) => t.album),
                 _groupedTab((t) => t.genre ?? '—'),
+                _groupedTab(_folderOf),
               ],
             ),
           ),
@@ -228,6 +284,62 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       await _refresh();
     }
   }
+
+  Future<void> _openUrl() async {
+    final ctl = TextEditingController();
+    final url = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Open stream URL'),
+        content: TextField(
+          controller: ctl,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'https://example.com/stream.mp3',
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, ctl.text.trim()),
+            child: const Text('Play'),
+          ),
+        ],
+      ),
+    );
+    if (url == null || url.isEmpty) return;
+    final handler = ref.read(audioHandlerProvider);
+    await handler.playUrl(url);
+  }
+
+  /// Parent directory name extracted from a track URI.
+  String _folderOf(Track t) {
+    final uri = t.uri;
+    if (uri.startsWith('content://')) return 'MediaStore';
+    final raw = uri.startsWith('file://')
+        ? Uri.parse(uri).toFilePath()
+        : uri;
+    final norm = raw.replaceAll('\\', '/');
+    final idx = norm.lastIndexOf('/');
+    if (idx <= 0) return 'Other';
+    final dir = norm.substring(0, idx);
+    final lastSlash = dir.lastIndexOf('/');
+    return lastSlash < 0 ? dir : dir.substring(lastSlash + 1);
+  }
+}
+
+enum _SortBy {
+  title('Title'),
+  artist('Artist'),
+  album('Album'),
+  duration('Duration'),
+  year('Year (newest)');
+
+  const _SortBy(this.label);
+  final String label;
 }
 
 /// Actions that can be performed on any track from any list.

@@ -40,16 +40,6 @@ class NowPlayingScreen extends ConsumerWidget {
             Navigator.maybePop(context);
           }
         },
-        onHorizontalDragEnd: (details) {
-          final v = details.primaryVelocity ?? 0;
-          if (v > 200) {
-            // Swipe right → next song
-            handler.skipToNext();
-          } else if (v < -200) {
-            // Swipe left → previous song
-            handler.skipToPrevious();
-          }
-        },
         child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -68,7 +58,7 @@ class NowPlayingScreen extends ConsumerWidget {
               children: [
                 _topBar(context, route),
                 const Spacer(),
-                AlbumArt(track: track, size: 320, heroTag: 'nowPlayingArt'),
+                const _ArtCarousel(),
                 const SizedBox(height: 32),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
@@ -274,9 +264,86 @@ class NowPlayingScreen extends ConsumerWidget {
   }
 }
 
-/// IconButton that visibly highlights when [active] is true. Designed to look
-/// good across light, dark and system themes — uses a filled tonal background
-/// for the "on" state instead of a bare colour change.
+/// Swipeable carousel of album-art for the active queue. Swiping a page calls
+/// [GaayanaAudioHandler.skipToQueueItem]; the player's index drives the
+/// carousel back in sync when the song changes naturally.
+class _ArtCarousel extends ConsumerStatefulWidget {
+  const _ArtCarousel();
+  @override
+  ConsumerState<_ArtCarousel> createState() => _ArtCarouselState();
+}
+
+class _ArtCarouselState extends ConsumerState<_ArtCarousel> {
+  late final PageController _controller;
+  int _expectedIndex = -1;
+
+  @override
+  void initState() {
+    super.initState();
+    final handler = ref.read(audioHandlerProvider);
+    _expectedIndex = handler.player.currentIndex ?? 0;
+    _controller = PageController(initialPage: _expectedIndex);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _syncToPlayer(int playerIndex) {
+    if (!_controller.hasClients) return;
+    if (playerIndex == _expectedIndex) return;
+    _expectedIndex = playerIndex;
+    _controller.animateToPage(
+      playerIndex,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final handler = ref.read(audioHandlerProvider);
+    final queue = ref.watch(queueProvider).valueOrNull ?? const <Track>[];
+    final currentIdx = handler.player.currentIndex ?? 0;
+
+    // Whenever the player index changes externally (autoplay / notification),
+    // animate the PageView to it.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncToPlayer(currentIdx);
+    });
+
+    if (queue.isEmpty) {
+      return const SizedBox(width: 320, height: 320);
+    }
+
+    return SizedBox(
+      height: 320,
+      child: PageView.builder(
+        controller: _controller,
+        itemCount: queue.length,
+        onPageChanged: (i) async {
+          if (i == _expectedIndex) return;
+          _expectedIndex = i;
+          await handler.skipToQueueItem(i);
+        },
+        itemBuilder: (_, i) {
+          final t = queue[i];
+          return Center(
+            child: AlbumArt(
+              track: t,
+              size: 320,
+              heroTag: i == currentIdx ? 'nowPlayingArt' : null,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// IconButton that visibly highlights when [active] is true.
 class _ToggleIconButton extends StatelessWidget {
   const _ToggleIconButton({
     required this.icon,
@@ -320,6 +387,40 @@ class _ToggleIconButton extends StatelessWidget {
 class _QueueSheet extends ConsumerWidget {
   const _QueueSheet();
 
+  Future<void> _saveAsPlaylist(
+      BuildContext context, WidgetRef ref, List<Track> queue) async {
+    final ctl = TextEditingController(
+      text: 'Queue ${DateTime.now().toString().substring(5, 16)}',
+    );
+    final name = await showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Save queue as playlist'),
+        content: TextField(controller: ctl, autofocus: true),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, ctl.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    final db = ref.read(databaseProvider);
+    final id = await db.createPlaylist(name);
+    for (final t in queue) {
+      await db.addToPlaylist(id, t.globalId);
+    }
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Saved "$name" with ${queue.length} songs')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final queue = ref.watch(queueProvider).valueOrNull ?? const <Track>[];
@@ -343,34 +444,61 @@ class _QueueSheet extends ConsumerWidget {
                 const Spacer(),
                 Text('${queue.length} songs',
                     style: TextStyle(color: scheme.onSurfaceVariant)),
+                IconButton(
+                  tooltip: 'Save as playlist',
+                  icon: const Icon(Icons.playlist_add),
+                  onPressed: queue.isEmpty
+                      ? null
+                      : () => _saveAsPlaylist(context, ref, queue),
+                ),
               ],
             ),
           ),
           const Divider(height: 1),
           Expanded(
-            child: ListView.builder(
-              controller: controller,
+            child: ReorderableListView.builder(
+              scrollController: controller,
+              buildDefaultDragHandles: false,
               itemCount: queue.length,
+              onReorder: (from, to) {
+                // ReorderableListView increments `to` once past `from`; undo.
+                final target = to > from ? to - 1 : to;
+                handler.moveQueueItem(from, target);
+              },
               itemBuilder: (_, i) {
                 final t = queue[i];
                 final selected = current?.globalId == t.globalId;
-                return ListTile(
-                  selected: selected,
-                  selectedTileColor:
-                      scheme.primaryContainer.withValues(alpha: 0.4),
-                  leading: AlbumArt(track: t, size: 40),
-                  title: Text(t.title,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  subtitle: Text(t.artist,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  trailing: selected
-                      ? Icon(Icons.equalizer, color: scheme.primary)
-                      : null,
-                  onTap: () async {
-                    await handler.skipToQueueItem(i);
-                    await handler.play();
-                    if (context.mounted) Navigator.pop(context);
-                  },
+                return Dismissible(
+                  key: ValueKey('q-${t.globalId}-$i'),
+                  direction: DismissDirection.endToStart,
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    color: scheme.errorContainer,
+                    child: Icon(Icons.delete_outline,
+                        color: scheme.onErrorContainer),
+                  ),
+                  onDismissed: (_) => handler.removeAt(i),
+                  child: ListTile(
+                    selected: selected,
+                    selectedTileColor:
+                        scheme.primaryContainer.withValues(alpha: 0.4),
+                    leading: AlbumArt(track: t, size: 40),
+                    title: Text(t.title,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text(t.artist,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    trailing: ReorderableDragStartListener(
+                      index: i,
+                      child: Icon(Icons.drag_handle,
+                          color: scheme.onSurfaceVariant),
+                    ),
+                    onTap: () async {
+                      await handler.skipToQueueItem(i);
+                      await handler.play();
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                  ),
                 );
               },
             ),

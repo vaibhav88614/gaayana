@@ -22,6 +22,8 @@ class GaayanaApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     // Activate the play-history recorder.
     ref.watch(playHistoryRecorderProvider);
+    // Persist queue + position so we can resume after relaunch.
+    ref.watch(playbackStatePersisterProvider);
 
     return DynamicColorGate(
       builder: (light, dark) => MaterialApp(

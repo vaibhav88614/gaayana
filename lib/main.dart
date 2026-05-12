@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
 import 'app/app.dart';
 import 'core/audio/audio_handler.dart';
@@ -55,6 +56,28 @@ Future<void> main() async {
       androidNotificationIcon: 'mipmap/ic_launcher',
     ),
   );
+
+  // ---- Restore last queue + position (deferred so it doesn't block UI) ------
+  unawaited(() async {
+    try {
+      final saved = await db.loadPlaybackState();
+      if (saved == null) return;
+      final tracks = <dynamic>[];
+      for (final id in saved.ids) {
+        final t = await db.trackByGlobalId(id);
+        if (t != null) tracks.add(t);
+      }
+      if (tracks.isEmpty) return;
+      await audioHandler.setQueue(
+        tracks.cast(),
+        initialIndex: saved.index.clamp(0, tracks.length - 1),
+      );
+      await audioHandler.seek(Duration(milliseconds: saved.positionMs));
+      // Do NOT auto-play — wait for the user to tap play.
+    } catch (e) {
+      debugPrint('Restore playback failed: $e');
+    }
+  }());
 
   runApp(
     ProviderScope(

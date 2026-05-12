@@ -142,6 +142,66 @@ final playHistoryRecorderProvider = Provider<void>((ref) {
   });
 });
 
+/// Persists the queue + position so that the user can resume after relaunch.
+/// Periodically samples player state; cheap and resilient to crashes.
+final playbackStatePersisterProvider = Provider<void>((ref) {
+  final handler = ref.watch(audioHandlerProvider);
+  final db = ref.watch(databaseProvider);
+  final prefs = ref.watch(sharedPrefsProvider);
+
+  // Restore persisted audio effects on first attach.
+  final savedBass = prefs.getDouble('audio.bassBoostDb') ?? 0.0;
+  if (savedBass > 0) handler.setBassBoost(savedBass);
+  final savedCrossfade = prefs.getInt('audio.crossfadeSec') ?? 0;
+  if (savedCrossfade > 0) {
+    handler.setCrossfade(Duration(seconds: savedCrossfade));
+  }
+  final savedSpeed = prefs.getDouble('audio.speed') ?? 1.0;
+  if (savedSpeed != 1.0) handler.setSpeed(savedSpeed);
+
+  // Persist effect changes whenever they happen.
+  final bSub = handler.bassBoostStream
+      .listen((v) => prefs.setDouble('audio.bassBoostDb', v));
+  final cSub = handler.crossfadeStream
+      .listen((v) => prefs.setInt('audio.crossfadeSec', v.inSeconds));
+  final sSub =
+      handler.speedStream.listen((v) => prefs.setDouble('audio.speed', v));
+
+  Future<void> save() async {
+    try {
+      final q = handler.currentQueue;
+      if (q.isEmpty) return;
+      await db.savePlaybackState(
+        queueGlobalIds: q.map((t) => t.globalId).toList(),
+        queueIndex: handler.player.currentIndex ?? 0,
+        positionMs: handler.player.position.inMilliseconds,
+      );
+    } catch (_) {}
+  }
+
+  // Save when the user pauses/stops.
+  final sub1 = handler.player.playingStream.listen((_) => save());
+  // Save when the track changes.
+  final sub2 = handler.player.currentIndexStream.listen((_) => save());
+  // Throttled position save every 10 s while playing.
+  DateTime lastSave = DateTime.fromMillisecondsSinceEpoch(0);
+  final sub3 = handler.player.positionStream.listen((_) {
+    final now = DateTime.now();
+    if (now.difference(lastSave).inSeconds < 10) return;
+    lastSave = now;
+    save();
+  });
+
+  ref.onDispose(() {
+    sub1.cancel();
+    sub2.cancel();
+    sub3.cancel();
+    bSub.cancel();
+    cSub.cancel();
+    sSub.cancel();
+  });
+});
+
 final loopModeProvider = StreamProvider((ref) {
   return ref.watch(audioHandlerProvider).loopMode;
 });
@@ -164,6 +224,10 @@ final crossfadeProvider = StreamProvider<Duration>((ref) {
 
 final gaplessProvider = StreamProvider<bool>((ref) {
   return ref.watch(audioHandlerProvider).gaplessStream;
+});
+
+final bassBoostProvider = StreamProvider<double>((ref) {
+  return ref.watch(audioHandlerProvider).bassBoostStream;
 });
 
 /// Whether [globalId] is in the favorites table. Re-fetched whenever

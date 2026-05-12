@@ -19,10 +19,33 @@ class AppDatabase {
     final path = p.join(dir.path, 'gaayana.db');
     final db = await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
     return _instance = AppDatabase._(db);
+  }
+
+  static Future<void> _onUpgrade(Database db, int from, int to) async {
+    if (from < 2) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS playback_state(
+          id INTEGER PRIMARY KEY,
+          queue_ids TEXT NOT NULL,
+          queue_index INTEGER NOT NULL,
+          position_ms INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+      ''');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS lyrics_cache(
+          cache_key TEXT PRIMARY KEY,
+          synced TEXT,
+          plain TEXT,
+          fetched_at INTEGER NOT NULL
+        );
+      ''');
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {
@@ -99,6 +122,23 @@ class AppDatabase {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         query TEXT NOT NULL,
         searched_at INTEGER NOT NULL
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE playback_state(
+        id INTEGER PRIMARY KEY,
+        queue_ids TEXT NOT NULL,
+        queue_index INTEGER NOT NULL,
+        position_ms INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    ''');
+    await db.execute('''
+      CREATE TABLE lyrics_cache(
+        cache_key TEXT PRIMARY KEY,
+        synced TEXT,
+        plain TEXT,
+        fetched_at INTEGER NOT NULL
       );
     ''');
   }
@@ -429,5 +469,70 @@ class AppDatabase {
       LIMIT ?
     ''', [limit]);
     return rows.map((r) => r['query'] as String).toList();
+  }
+
+  // ---- Playback state (resume) ---------------------------------------------
+
+  /// Persist the active queue + position so we can resume on next launch.
+  Future<void> savePlaybackState({
+    required List<String> queueGlobalIds,
+    required int queueIndex,
+    required int positionMs,
+  }) async {
+    await _db.insert(
+      'playback_state',
+      {
+        'id': 1,
+        'queue_ids': queueGlobalIds.join('\u0001'),
+        'queue_index': queueIndex,
+        'position_ms': positionMs,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<({List<String> ids, int index, int positionMs})?>
+      loadPlaybackState() async {
+    final rows = await _db.query('playback_state', where: 'id = 1', limit: 1);
+    if (rows.isEmpty) return null;
+    final r = rows.first;
+    final raw = (r['queue_ids'] as String?) ?? '';
+    if (raw.isEmpty) return null;
+    return (
+      ids: raw.split('\u0001'),
+      index: (r['queue_index'] as int?) ?? 0,
+      positionMs: (r['position_ms'] as int?) ?? 0,
+    );
+  }
+
+  // ---- Lyrics cache --------------------------------------------------------
+
+  String lyricsCacheKey(String title, String artist, String album) =>
+      '${title.toLowerCase()}|${artist.toLowerCase()}|${album.toLowerCase()}';
+
+  Future<({String? synced, String? plain})?> getCachedLyrics(
+      String cacheKey) async {
+    final rows = await _db.query('lyrics_cache',
+        where: 'cache_key = ?', whereArgs: [cacheKey], limit: 1);
+    if (rows.isEmpty) return null;
+    return (
+      synced: rows.first['synced'] as String?,
+      plain: rows.first['plain'] as String?,
+    );
+  }
+
+  Future<void> cacheLyrics(String cacheKey,
+      {String? synced, String? plain}) async {
+    await _db.insert(
+      'lyrics_cache',
+      {
+        'cache_key': cacheKey,
+        'synced': synced,
+        'plain': plain,
+        'fetched_at': DateTime.now().millisecondsSinceEpoch,
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 }

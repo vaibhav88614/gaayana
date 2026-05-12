@@ -18,9 +18,12 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
 
   /// Android system equalizer applied to the player.
   final ja.AndroidEqualizer equalizer = ja.AndroidEqualizer();
+  /// Android loudness enhancer — drives the "Bass / Loudness boost" slider.
+  final ja.AndroidLoudnessEnhancer loudnessEnhancer =
+      ja.AndroidLoudnessEnhancer();
   late final ja.AudioPlayer player = ja.AudioPlayer(
     audioPipeline: ja.AudioPipeline(
-      androidAudioEffects: [equalizer],
+      androidAudioEffects: [loudnessEnhancer, equalizer],
     ),
   );
   final BehaviorSubject<List<Track>> _queue =
@@ -33,6 +36,8 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
   final BehaviorSubject<Duration> _crossfade =
       BehaviorSubject<Duration>.seeded(Duration.zero);
   final BehaviorSubject<bool> _gapless = BehaviorSubject<bool>.seeded(true);
+  final BehaviorSubject<double> _bassBoostDb =
+      BehaviorSubject<double>.seeded(0.0);
 
   Stream<List<Track>> get queueTracks => _queue.stream;
   Stream<LoopMode> get loopMode => _loop.stream;
@@ -41,6 +46,7 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
   Stream<double> get pitchStream => _pitch.stream;
   Stream<Duration> get crossfadeStream => _crossfade.stream;
   Stream<bool> get gaplessStream => _gapless.stream;
+  Stream<double> get bassBoostStream => _bassBoostDb.stream;
   LoopMode get currentLoop => _loop.value;
   List<Track> get currentQueue => _queue.value;
   double get currentSpeed => _speed.value;
@@ -219,6 +225,38 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
     queue.add(list.map(_toMediaItem).toList());
   }
 
+  /// Reorder a track within the current queue.
+  Future<void> moveQueueItem(int from, int to) async {
+    if (from == to) return;
+    final list = [..._queue.value];
+    if (from < 0 || from >= list.length) return;
+    final item = list.removeAt(from);
+    final insertAt = to.clamp(0, list.length);
+    list.insert(insertAt, item);
+    _queue.add(List.unmodifiable(list));
+    final src = player.audioSource;
+    if (src is ja.ConcatenatingAudioSource) {
+      await src.move(from, insertAt);
+    }
+    queue.add(list.map(_toMediaItem).toList());
+  }
+
+  /// Play an arbitrary http(s)/file stream URL as a single-item queue.
+  /// Used for "Open URL…" and for internet radio stations.
+  Future<void> playUrl(String url, {String? title, String? artist}) async {
+    final t = Track(
+      id: 'url:$url',
+      sourceId: 'stream',
+      title: title ?? Uri.parse(url).pathSegments.lastOrNull ?? url,
+      artist: artist ?? 'Stream',
+      album: '',
+      durationMs: 0,
+      uri: url,
+    );
+    await setQueue([t]);
+    await play();
+  }
+
   ja.AudioSource _toAudioSource(Track t) => ja.AudioSource.uri(
         Uri.parse(t.uri),
         tag: _toMediaItem(t),
@@ -350,6 +388,20 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
     // when disabled we insert a tiny silence between tracks.
   }
 
+  /// Boost loudness/bass by [db] (0..12). 0 disables the effect entirely.
+  /// just_audio's `setTargetGain` is in "bels" (×1000 → millibels), so we
+  /// divide by 10 to convert decibels.
+  Future<void> setBassBoost(double db) async {
+    final clamped = db.clamp(0.0, 12.0);
+    _bassBoostDb.add(clamped);
+    try {
+      await loudnessEnhancer.setEnabled(clamped > 0);
+      await loudnessEnhancer.setTargetGain(clamped / 10.0);
+    } catch (_) {
+      // Loudness enhancer is Android-only and may fail before init.
+    }
+  }
+
   StreamSubscription<Duration>? _crossfadeSub;
   Track? _crossfadingFrom;
 
@@ -396,5 +448,6 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
     _pitch.close();
     _crossfade.close();
     _gapless.close();
+    _bassBoostDb.close();
   }
 }

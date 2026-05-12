@@ -23,13 +23,35 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool forceNetwork = false}) async {
     final track = ref.read(currentTrackProvider).valueOrNull;
     if (track == null) {
       setState(() => _loading = false);
       return;
     }
     setState(() => _loading = true);
+    final db = ref.read(databaseProvider);
+    final cacheKey = db.lyricsCacheKey(
+        _stripTags(track.title), track.artist, track.album);
+
+    // Try the cache first (unless the user explicitly tapped refresh).
+    if (!forceNetwork) {
+      final cached = await db.getCachedLyrics(cacheKey);
+      if (cached != null &&
+          ((cached.synced ?? '').isNotEmpty ||
+              (cached.plain ?? '').isNotEmpty)) {
+        if (!mounted) return;
+        setState(() {
+          _lines = (cached.synced ?? '').isNotEmpty
+              ? parseLrc(cached.synced!)
+              : const [];
+          _plain = cached.plain;
+          _loading = false;
+        });
+        return;
+      }
+    }
+
     final r = await ref.read(lrclibClientProvider).fetch(
           trackName: _stripTags(track.title),
           artistName: track.artist,
@@ -37,6 +59,12 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
           durationSeconds: track.durationMs ~/ 1000,
         );
     if (!mounted) return;
+
+    // Persist for offline use.
+    if ((r.synced ?? '').isNotEmpty || (r.plain ?? '').isNotEmpty) {
+      await db.cacheLyrics(cacheKey, synced: r.synced, plain: r.plain);
+    }
+
     setState(() {
       _lines = r.synced != null ? parseLrc(r.synced!) : const [];
       _plain = r.plain;
@@ -73,7 +101,7 @@ class _LyricsScreenState extends ConsumerState<LyricsScreen> {
           IconButton(
             tooltip: 'Refresh',
             icon: const Icon(Icons.refresh),
-            onPressed: _load,
+            onPressed: () => _load(forceNetwork: true),
           ),
         ],
       ),
