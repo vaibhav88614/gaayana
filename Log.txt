@@ -1,0 +1,22 @@
+Cross fade is not being applied .
+
+In playlist after adding some songs and clicking on three buttons next to removes them from playlist
+
+The some stops when I press back 
+
+There is not player in notification bar or on lock screen when the song is playing in background 
+
+Add the right swipe for next song and left swipe for previous song 
+
+When I open the song player , I can see a button on top which does not function when clicked on it , the button is next to speaker text 
+
+In Equalizer preset add a button named normal which switch backside to normal.
+
+When in favorites section add a round button in lower right hand side with paly symbol to it which will play all the songs in favorites 
+
+
+And in playlist section add feature of play all along with rename and delete 
+
+Add a darker highlight for buttons when clicked for shuffle and loop sleep timer in dark mode and in system mode and day mode also .
+
+ When I open YouTube/instagram when playing song in background the songs gets fadded and stops but it won't resume after I come back from watching reels or shorts.
