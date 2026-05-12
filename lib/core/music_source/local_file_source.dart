@@ -28,13 +28,19 @@ class LocalFileSource extends MusicSource {
   bool get isOnline => false;
 
   /// Request the appropriate permission for the platform and SDK level.
+  /// Safe to call repeatedly — already-granted permissions return immediately.
   Future<bool> ensurePermission() async {
     if (Platform.isAndroid) {
-      // Android 13+ uses READ_MEDIA_AUDIO; older uses storage.
+      // Android 13+ uses READ_MEDIA_AUDIO; older uses READ_EXTERNAL_STORAGE.
+      // Try the modern permission first, then fall back.
       final audio = await Permission.audio.request();
-      if (audio.isGranted) return true;
+      if (audio.isGranted || audio.isLimited) return true;
       final storage = await Permission.storage.request();
-      return storage.isGranted;
+      if (storage.isGranted) return true;
+      // Notifications permission for the foreground-service notification on
+      // Android 13+. Not strictly required but improves UX.
+      await Permission.notification.request();
+      return false;
     } else if (Platform.isIOS) {
       final media = await Permission.mediaLibrary.request();
       return media.isGranted;

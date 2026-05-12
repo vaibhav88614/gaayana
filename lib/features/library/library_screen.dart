@@ -27,7 +27,15 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   void initState() {
     super.initState();
     _tab = TabController(length: 6, vsync: this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      // On the very first launch, force a scan so we prompt for the
+      // READ_MEDIA_AUDIO / storage permission immediately and populate the
+      // library before the user has to hunt for the refresh button.
+      final prefs = ref.read(sharedPrefsProvider);
+      final firstRun = !(prefs.getBool('library.firstScanDone') ?? false);
+      await _refresh(forceScan: firstRun);
+      if (firstRun) await prefs.setBool('library.firstScanDone', true);
+    });
   }
 
   Future<void> _refresh({bool forceScan = false}) async {
