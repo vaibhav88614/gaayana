@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'app/app.dart';
 import 'core/audio/audio_handler.dart';
@@ -58,11 +59,30 @@ Future<void> main() async {
     ),
   );
 
-  // ---- Notification permission (Android 13+) --------------------------------
-  // The lock-screen / shade media controls won't appear without this. Done
-  // after audio_service.init so the foreground-service notification channel
-  // is already registered.
-  unawaited(Permission.notification.request());
+  // ---- First-launch permissions --------------------------------------------
+  // Notification permission (Android 13+) — the lock-screen / shade media
+  // controls won't appear without this. Media-library permission is required
+  // by the local-file source to scan the on-device music. Both are requested
+  // before runApp so the user gets BOTH prompts on a fresh install instead of
+  // discovering the missing media access only after navigating to the library.
+  // Sequenced (await) rather than fire-and-forget so the second prompt is not
+  // suppressed by the platform while the first is still on screen.
+  try {
+    await Permission.notification.request();
+    if (Platform.isAndroid) {
+      // Android 13+ uses READ_MEDIA_AUDIO; older releases use
+      // READ_EXTERNAL_STORAGE. Try the modern permission first; if it isn't
+      // applicable (or denied) fall back to legacy storage.
+      final audio = await Permission.audio.request();
+      if (!(audio.isGranted || audio.isLimited)) {
+        await Permission.storage.request();
+      }
+    } else if (Platform.isIOS) {
+      await Permission.mediaLibrary.request();
+    }
+  } catch (e) {
+    debugPrint('Permission request failed: $e');
+  }
 
   // ---- Restore last queue + position (deferred so it doesn't block UI) ------
   unawaited(() async {

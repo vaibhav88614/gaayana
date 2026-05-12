@@ -243,3 +243,32 @@ final isFavoriteProvider =
 
 /// Bumped whenever a favorite is toggled, to invalidate watchers.
 final favoritesRefreshProvider = StateProvider<int>((_) => 0);
+
+// ---- Visualizer style preference ------------------------------------------
+
+/// Render styles for the now-playing visualizer.
+enum VisualizerStyle { bars, wave, dots, off }
+
+class VisualizerStyleController extends StateNotifier<VisualizerStyle> {
+  VisualizerStyleController(this._prefs) : super(_load(_prefs));
+  final SharedPreferences _prefs;
+  static const _key = 'ui.visualizerStyle';
+
+  static VisualizerStyle _load(SharedPreferences p) {
+    final raw = p.getString(_key);
+    return VisualizerStyle.values.firstWhere(
+      (s) => s.name == raw,
+      orElse: () => VisualizerStyle.bars,
+    );
+  }
+
+  void set(VisualizerStyle s) {
+    state = s;
+    _prefs.setString(_key, s.name);
+  }
+}
+
+final visualizerStyleProvider =
+    StateNotifierProvider<VisualizerStyleController, VisualizerStyle>((ref) {
+  return VisualizerStyleController(ref.watch(sharedPrefsProvider));
+});

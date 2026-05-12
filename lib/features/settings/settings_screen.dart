@@ -153,6 +153,53 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               setState(() {});
             },
           ),
+          const Divider(),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text('Visualizer style',
+                style: Theme.of(context).textTheme.titleSmall),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text(
+              'Choose the animation shown on the now-playing screen.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          Consumer(builder: (context, ref, _) {
+            final style = ref.watch(visualizerStyleProvider);
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SegmentedButton<VisualizerStyle>(
+                segments: const [
+                  ButtonSegment(
+                    value: VisualizerStyle.bars,
+                    icon: Icon(Icons.equalizer),
+                    label: Text('Bars'),
+                  ),
+                  ButtonSegment(
+                    value: VisualizerStyle.wave,
+                    icon: Icon(Icons.show_chart),
+                    label: Text('Wave'),
+                  ),
+                  ButtonSegment(
+                    value: VisualizerStyle.dots,
+                    icon: Icon(Icons.more_horiz),
+                    label: Text('Dots'),
+                  ),
+                  ButtonSegment(
+                    value: VisualizerStyle.off,
+                    icon: Icon(Icons.visibility_off_outlined),
+                    label: Text('Off'),
+                  ),
+                ],
+                selected: {style},
+                onSelectionChanged: (sel) => ref
+                    .read(visualizerStyleProvider.notifier)
+                    .set(sel.first),
+              ),
+            );
+          }),
         ],
       ),
     );

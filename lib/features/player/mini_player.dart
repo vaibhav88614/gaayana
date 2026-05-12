@@ -22,7 +22,7 @@ class MiniPlayer extends ConsumerWidget {
     return Material(
       color: scheme.surfaceContainerHighest,
       child: InkWell(
-        onTap: () => Navigator.of(context).push(PageRouteBuilder(
+        onTap: () => Navigator.of(context, rootNavigator: true).push(PageRouteBuilder(
           opaque: true,
           transitionDuration: const Duration(milliseconds: 320),
           reverseTransitionDuration: const Duration(milliseconds: 260),

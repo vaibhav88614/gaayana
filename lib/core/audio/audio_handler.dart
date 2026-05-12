@@ -73,33 +73,31 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
 
     // Resume after a transient audio-focus loss (e.g. user watches an
     // Instagram reel / YouTube short and comes back).
+    //
+    // Snapshot `_wasPlayingBeforeInterruption` at the START of EVERY
+    // interruption (regardless of type), because by the time the OS sends the
+    // "end" event the player has already been paused by just_audio's own
+    // focus handler — so checking `player.playing` then is too late and the
+    // resume never fires. On end, always restore volume (covers a duck that
+    // was upgraded to a pause mid-flight) and resume playback if we had been
+    // playing when the interruption began.
     session.interruptionEventStream.listen((event) async {
       if (event.begin) {
+        _wasPlayingBeforeInterruption = player.playing;
         switch (event.type) {
           case AudioInterruptionType.duck:
-            // Lower volume while the other app plays.
             await player.setVolume(0.3);
             break;
           case AudioInterruptionType.pause:
           case AudioInterruptionType.unknown:
-            if (player.playing) {
-              _wasPlayingBeforeInterruption = true;
-              await player.pause();
-            }
+            if (player.playing) await player.pause();
             break;
         }
       } else {
-        switch (event.type) {
-          case AudioInterruptionType.duck:
-            await player.setVolume(1.0);
-            break;
-          case AudioInterruptionType.pause:
-          case AudioInterruptionType.unknown:
-            if (_wasPlayingBeforeInterruption) {
-              _wasPlayingBeforeInterruption = false;
-              await player.play();
-            }
-            break;
+        await player.setVolume(1.0);
+        if (_wasPlayingBeforeInterruption) {
+          _wasPlayingBeforeInterruption = false;
+          await player.play();
         }
       }
     });
@@ -303,17 +301,18 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
       if (!player.playing) await player.play();
       return;
     }
-    final cur = player.currentIndex ?? 0;
-    int next;
-    if (cur < q.length - 1) {
-      next = cur + 1;
+    // Prefer just_audio's native advance — it's the source-of-truth for the
+    // index and avoids a race where `player.currentIndex` lags the queue and
+    // we end up re-seeking to the same track (the "Next restarts current
+    // song" bug).
+    if (player.hasNext) {
+      await player.seekToNext();
     } else if (_loop.value == LoopMode.all) {
-      next = 0;
+      await player.seek(Duration.zero, index: 0);
     } else {
-      // End of queue — wrap so the button always produces feedback.
-      next = 0;
+      // End of queue & no loop — wrap so the button always produces feedback.
+      await player.seek(Duration.zero, index: 0);
     }
-    await player.seek(Duration.zero, index: next);
     if (!player.playing) await player.play();
   }
 
@@ -325,17 +324,14 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
       await player.seek(Duration.zero);
       return;
     }
-    final cur = player.currentIndex ?? 0;
-    int prev;
-    if (cur > 0) {
-      prev = cur - 1;
+    if (player.hasPrevious) {
+      await player.seekToPrevious();
     } else if (_loop.value == LoopMode.all) {
-      prev = q.length - 1;
+      await player.seek(Duration.zero, index: q.length - 1);
     } else {
       await player.seek(Duration.zero);
       return;
     }
-    await player.seek(Duration.zero, index: prev);
     if (!player.playing) await player.play();
   }
 

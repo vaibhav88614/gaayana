@@ -34,11 +34,13 @@ class NowPlayingScreen extends ConsumerWidget {
     final duration = Duration(milliseconds: track.durationMs);
 
     return Scaffold(
-      body: GestureDetector(
+      body: PopScope(
+        canPop: true,
+        child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onVerticalDragEnd: (details) {
           if ((details.primaryVelocity ?? 0) > 200) {
-            Navigator.maybePop(context);
+            Navigator.of(context).pop();
           }
         },
         child: Container(
@@ -105,6 +107,7 @@ class NowPlayingScreen extends ConsumerWidget {
               ],
             ),
           ),
+        ),
         ),
         ),
       ),
@@ -312,13 +315,17 @@ class _ArtCarouselState extends ConsumerState<_ArtCarousel> {
   Widget build(BuildContext context) {
     final handler = ref.read(audioHandlerProvider);
     final queue = ref.watch(queueProvider).valueOrNull ?? const <Track>[];
-    final currentIdx = handler.player.currentIndex ?? 0;
-
-    // Whenever the player index changes externally (autoplay / notification),
-    // animate the PageView to it.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncToPlayer(currentIdx);
+    // Listen to the *track* stream so the carousel rebuilds (and animates)
+    // every time the player advances — manual button presses, autoplay, or
+    // notification controls all flow through this. Reading
+    // `handler.player.currentIndex` once per build was the original bug:
+    // nothing triggered a rebuild on a Next/Previous tap, so the art stayed
+    // pinned to the previous song while the audio actually advanced.
+    ref.listen(currentTrackProvider, (_, __) {
+      final idx = handler.player.currentIndex;
+      if (idx != null) _syncToPlayer(idx);
     });
+    final currentIdx = handler.player.currentIndex ?? 0;
 
     if (queue.isEmpty) {
       return const SizedBox(width: 320, height: 320);

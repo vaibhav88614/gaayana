@@ -63,6 +63,14 @@ function Make-Icon([int]$size, [string]$out, [bool]$rounded) {
   $g.DrawArc($faint,  [single]($size*0.72),[single]($size*0.32),
                        [single]($size*0.22),[single]($size*0.36), [single]270, [single]180)
 
+  # Center the eighth-note glyph (stem + flag + head). The original layout
+  # placed the stem at x=0.54..0.58 and the flag extending to x=0.78, which
+  # made the visible note centroid sit right-of-center. Shifting the whole
+  # note group left by 0.06*size puts its centroid on the canvas center.
+  $noteShift = [single]($size * -0.06)
+  $ns = $g.Save()
+  $g.TranslateTransform($noteShift, [single]0)
+
   $stemRect = New-Object System.Drawing.RectangleF (
     [single]($size*0.54)),([single]($size*0.27)),([single]($size*0.04)),([single]($size*0.38))
   $g.FillRectangle($noteBrush, $stemRect)
@@ -88,6 +96,8 @@ function Make-Icon([int]$size, [string]$out, [bool]$rounded) {
     [single](-$size*0.10)),([single](-$size*0.065)),([single]($size*0.20)),([single]($size*0.13))
   $g.FillEllipse($noteBrush, $headRect)
   $g.Restore($st)
+
+  $g.Restore($ns)
 
   $bmp.Save($out, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
