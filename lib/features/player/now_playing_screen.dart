@@ -6,6 +6,7 @@ import '../../core/providers.dart';
 import '../../shared/widgets/album_art.dart';
 import '../effects/effects_sheet.dart';
 import '../sleep_timer/sleep_timer_sheet.dart';
+import 'visualizer.dart';
 
 /// Full-screen player. Album art, dynamic gradient, scrubber, transport,
 /// loop/shuffle, route indicator, lyrics button, sleep timer.
@@ -79,7 +80,12 @@ class NowPlayingScreen extends ConsumerWidget {
                       key: ValueKey<String>('a-${track.globalId}'),
                       style: TextStyle(color: scheme.onSurfaceVariant)),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24),
+                  child: AudioVisualizerBar(barCount: 28, height: 40),
+                ),
+                const SizedBox(height: 16),
                 _scrubber(handler, position, duration),
                 const SizedBox(height: 8),
                 Row(

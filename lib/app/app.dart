@@ -4,12 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/providers.dart';
 import '../features/auth/login_screen.dart';
 import '../features/downloads/downloads_screen.dart';
+import '../features/effects/equalizer_screen.dart';
 import '../features/favorites/favorites_screen.dart';
+import '../features/library/http_browser_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/lyrics/lyrics_screen.dart';
 import '../features/playlists/playlists_screen.dart';
 import '../features/search/search_screen.dart';
 import '../features/settings/settings_screen.dart';
+import '../features/settings/folders_screen.dart';
 import 'theme.dart';
 
 class GaayanaApp extends ConsumerWidget {
@@ -39,6 +42,9 @@ class GaayanaApp extends ConsumerWidget {
           '/downloads': (_) => const DownloadsScreen(),
           '/lyrics': (_) => const LyricsScreen(),
           '/settings': (_) => const SettingsScreen(),
+          '/equalizer': (_) => const EqualizerScreen(),
+          '/folders': (_) => const FoldersScreen(),
+          '/http-browser': (_) => const HttpBrowserScreen(),
         },
         home: !firebaseReady
             ? const LibraryScreen()

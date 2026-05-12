@@ -88,6 +88,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           const Divider(),
           ListTile(
+            leading: const Icon(Icons.graphic_eq),
+            title: const Text('Equalizer'),
+            subtitle: const Text('Per-band gain, all presets'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed('/equalizer'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.folder_special),
+            title: const Text('Music folders'),
+            subtitle: const Text('Include / exclude scan locations'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.of(context).pushNamed('/folders'),
+          ),
+          ListTile(
             leading: const Icon(Icons.equalizer),
             title: const Text('Equalizer & effects'),
             subtitle: const Text('Presets, speed, pitch, crossfade'),

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -14,8 +15,10 @@ import 'music_source.dart';
 /// 100% legal, 100% offline-capable. This is the default source until a
 /// streaming provider is configured.
 class LocalFileSource extends MusicSource {
-  LocalFileSource(this._db);
+  LocalFileSource(this._db, {this.prefs});
   final AppDatabase _db;
+  /// SharedPreferences for reading folder include/exclude filters.
+  final dynamic prefs;
   final OnAudioQuery _query = OnAudioQuery();
 
   @override
@@ -63,10 +66,40 @@ class LocalFileSource extends MusicSource {
       // Skip ringtones, alarms, and very short clips.
       if ((s.duration ?? 0) < 20 * 1000) continue;
       if (s.isMusic == false) continue;
+      // Apply user folder include/exclude filter against the file's real path.
+      if (prefs != null && !_passesFolderFilter(s.data)) continue;
       tracks.add(_fromSongModel(s));
     }
     await _db.upsertTracks(tracks);
     return tracks;
+  }
+
+  bool _passesFolderFilter(String filePath) {
+    try {
+      final inc = _readList('library.folders.included');
+      final exc = _readList('library.folders.excluded');
+      final norm = filePath.replaceAll('\\', '/');
+      if (inc.isNotEmpty) {
+        final ok = inc.any((d) => norm.startsWith(d.replaceAll('\\', '/')));
+        if (!ok) return false;
+      }
+      for (final d in exc) {
+        if (norm.startsWith(d.replaceAll('\\', '/'))) return false;
+      }
+      return true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  List<String> _readList(String key) {
+    final raw = prefs.getString(key);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      return (jsonDecode(raw) as List).cast<String>();
+    } catch (_) {
+      return const [];
+    }
   }
 
   Track _fromSongModel(SongModel s) {

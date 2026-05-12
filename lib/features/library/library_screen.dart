@@ -152,6 +152,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                   _import();
                 case 'url':
                   _openUrl();
+                case 'http':
+                  Navigator.of(context).pushNamed('/http-browser');
+                case 'cast':
+                  _showCastInfo();
                 case 'playlists':
                   Navigator.of(context).pushNamed('/playlists');
                 case 'favorites':
@@ -165,6 +169,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'import', child: Text('Import files…')),
               PopupMenuItem(value: 'url', child: Text('Open stream URL…')),
+              PopupMenuItem(
+                  value: 'http', child: Text('Browse HTTP server…')),
+              PopupMenuItem(value: 'cast', child: Text('Cast / external…')),
               PopupMenuItem(value: 'playlists', child: Text('Playlists')),
               PopupMenuItem(value: 'favorites', child: Text('Favorites')),
               PopupMenuItem(value: 'downloads', child: Text('Downloads')),
@@ -313,6 +320,32 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     if (url == null || url.isEmpty) return;
     final handler = ref.read(audioHandlerProvider);
     await handler.playUrl(url);
+  }
+
+  void _showCastInfo() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Cast & external output'),
+        content: const Text(
+          'Gaayana exposes a Media Session, which means Android\'s built-in '
+          '"Output picker" can route audio to any registered receiver, '
+          'including Chromecast, Bluetooth, and DLNA renderers.\n\n'
+          'To switch device:\n'
+          '  • Pull down the notification shade while playing\n'
+          '  • Tap the speaker / cast icon in the top right of the '
+          'Gaayana notification\n\n'
+          'For HTTP audio servers (Subsonic-style folder shares) use '
+          '"Browse HTTP server…" instead.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Parent directory name extracted from a track URI.

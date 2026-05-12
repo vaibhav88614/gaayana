@@ -98,7 +98,10 @@ class ThemeModeController extends StateNotifier<ThemeMode> {
 }
 
 final musicSourceProvider = Provider<MusicSource>((ref) {
-  return LocalFileSource(ref.watch(databaseProvider));
+  return LocalFileSource(
+    ref.watch(databaseProvider),
+    prefs: ref.watch(sharedPrefsProvider),
+  );
 });
 
 final lastfmClientProvider = Provider<LastfmClient>((ref) {
