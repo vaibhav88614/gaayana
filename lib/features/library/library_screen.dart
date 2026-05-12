@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models.dart';
 import '../../core/music_source/local_file_source.dart';
 import '../../core/providers.dart';
+import '../../core/system_bridge.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/track_tile.dart';
 import '../player/mini_player.dart';
@@ -99,8 +100,16 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        // Library is the root screen — minimise the app instead of exiting,
+        // so audio playback continues in the background.
+        SystemBridge.moveToBackground();
+      },
+      child: Scaffold(
+        appBar: AppBar(
         title: const Text('Library'),
         bottom: TabBar(
           controller: _tab,
@@ -121,18 +130,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             icon: const Icon(Icons.search),
             onPressed: () => Navigator.of(context).pushNamed('/search'),
           ),
-          PopupMenuButton<_SortBy>(
-            tooltip: 'Sort',
-            icon: const Icon(Icons.sort),
+          _SortMenuButton(
+            current: _sortBy,
             onSelected: _setSort,
-            itemBuilder: (_) => [
-              for (final s in _SortBy.values)
-                CheckedPopupMenuItem(
-                  value: s,
-                  checked: _sortBy == s,
-                  child: Text(s.label),
-                ),
-            ],
           ),
           _ThemeToggleButton(),
           IconButton(
@@ -200,6 +200,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           ),
           const MiniPlayer(),
         ],
+      ),
       ),
     );
   }
@@ -375,6 +376,53 @@ enum _SortBy {
   final String label;
 }
 
+/// Non-modal sort menu. Unlike `PopupMenuButton`, this uses `MenuAnchor` so
+/// taps outside the menu (including drag-scrolling the song list) close the
+/// menu AND get delivered to the underlying list — i.e. you can scroll
+/// straight away without a separate dismiss tap.
+class _SortMenuButton extends StatefulWidget {
+  const _SortMenuButton({required this.current, required this.onSelected});
+  final _SortBy current;
+  final ValueChanged<_SortBy> onSelected;
+
+  @override
+  State<_SortMenuButton> createState() => _SortMenuButtonState();
+}
+
+class _SortMenuButtonState extends State<_SortMenuButton> {
+  final _ctl = MenuController();
+
+  @override
+  Widget build(BuildContext context) {
+    return MenuAnchor(
+      controller: _ctl,
+      consumeOutsideTap: false,
+      style: const MenuStyle(
+        visualDensity: VisualDensity.compact,
+      ),
+      menuChildren: [
+        for (final s in _SortBy.values)
+          MenuItemButton(
+            leadingIcon: Icon(s == widget.current
+                ? Icons.radio_button_checked
+                : Icons.radio_button_unchecked),
+            onPressed: () {
+              widget.onSelected(s);
+              _ctl.close();
+            },
+            child: Text(s.label),
+          ),
+      ],
+      builder: (context, controller, _) => IconButton(
+        tooltip: 'Sort',
+        icon: const Icon(Icons.sort),
+        onPressed: () =>
+            controller.isOpen ? controller.close() : controller.open(),
+      ),
+    );
+  }
+}
+
 /// Actions that can be performed on any track from any list.
 class TrackActionSheet extends ConsumerWidget {
   const TrackActionSheet({required this.track, super.key});
@@ -383,10 +431,25 @@ class TrackActionSheet extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final db = ref.read(databaseProvider);
+    final isLocal = track.sourceId == 'local';
     return SafeArea(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          ListTile(
+            leading: const Icon(Icons.playlist_add),
+            title: const Text('Add to queue'),
+            onTap: () async {
+              final handler = ref.read(audioHandlerProvider);
+              await handler.appendToQueue([track]);
+              if (context.mounted) {
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Added "${track.title}" to queue')),
+                );
+              }
+            },
+          ),
           ListTile(
             leading: const Icon(Icons.queue_music),
             title: const Text('Add to playlist'),
@@ -424,14 +487,18 @@ class TrackActionSheet extends ConsumerWidget {
               );
             },
           ),
-          ListTile(
-            leading: const Icon(Icons.download_outlined),
-            title: const Text('Download for offline'),
-            onTap: () {
-              Navigator.pop(context);
-              Navigator.of(context).pushNamed('/downloads', arguments: track);
-            },
-          ),
+          // "Download for offline" is only meaningful for streamed (non-local)
+          // sources — local files are already on the device.
+          if (!isLocal)
+            ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('Download for offline'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.of(context)
+                    .pushNamed('/downloads', arguments: track);
+              },
+            ),
           ListTile(
             leading: const Icon(Icons.share),
             title: const Text('Share'),

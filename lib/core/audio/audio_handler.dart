@@ -190,12 +190,16 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
     if (tracks.isEmpty) return;
     _queue.add(List.unmodifiable(tracks));
     final sources = tracks.map(_toAudioSource).toList();
+    final idx = initialIndex.clamp(0, tracks.length - 1);
     await player.setAudioSource(
       ja.ConcatenatingAudioSource(children: sources),
-      initialIndex: initialIndex,
+      initialIndex: idx,
       preload: true,
     );
     queue.add(tracks.map(_toMediaItem).toList());
+    // Publish the current MediaItem immediately so the notification & lock
+    // screen populate without waiting for the index stream tick.
+    mediaItem.add(_toMediaItem(tracks[idx]));
   }
 
   Future<void> appendToQueue(List<Track> tracks) async {
@@ -292,26 +296,47 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> skipToNext() async {
+    final q = _queue.value;
+    if (q.isEmpty) return;
     if (_loop.value == LoopMode.one) {
       await player.seek(Duration.zero);
+      if (!player.playing) await player.play();
       return;
     }
-    if (player.hasNext) {
-      await player.seekToNext();
-    } else if (_loop.value == LoopMode.all && _queue.value.isNotEmpty) {
-      await player.seek(Duration.zero, index: 0);
+    final cur = player.currentIndex ?? 0;
+    int next;
+    if (cur < q.length - 1) {
+      next = cur + 1;
+    } else if (_loop.value == LoopMode.all) {
+      next = 0;
+    } else {
+      // End of queue — wrap so the button always produces feedback.
+      next = 0;
     }
+    await player.seek(Duration.zero, index: next);
+    if (!player.playing) await player.play();
   }
 
   @override
   Future<void> skipToPrevious() async {
+    final q = _queue.value;
+    if (q.isEmpty) return;
     if (player.position.inSeconds > 3) {
       await player.seek(Duration.zero);
       return;
     }
-    if (player.hasPrevious) {
-      await player.seekToPrevious();
+    final cur = player.currentIndex ?? 0;
+    int prev;
+    if (cur > 0) {
+      prev = cur - 1;
+    } else if (_loop.value == LoopMode.all) {
+      prev = q.length - 1;
+    } else {
+      await player.seek(Duration.zero);
+      return;
     }
+    await player.seek(Duration.zero, index: prev);
+    if (!player.playing) await player.play();
   }
 
   @override

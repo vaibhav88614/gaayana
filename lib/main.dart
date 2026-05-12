@@ -2,6 +2,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
@@ -56,6 +57,12 @@ Future<void> main() async {
       androidNotificationIcon: 'mipmap/ic_launcher',
     ),
   );
+
+  // ---- Notification permission (Android 13+) --------------------------------
+  // The lock-screen / shade media controls won't appear without this. Done
+  // after audio_service.init so the foreground-service notification channel
+  // is already registered.
+  unawaited(Permission.notification.request());
 
   // ---- Restore last queue + position (deferred so it doesn't block UI) ------
   unawaited(() async {
