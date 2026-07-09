@@ -5,6 +5,7 @@ import 'package:audio_session/audio_session.dart';
 import 'package:just_audio/just_audio.dart' as ja;
 import 'package:rxdart/rxdart.dart';
 
+import '../debug_log.dart';
 import '../models.dart';
 
 /// `audio_service` background handler.
@@ -127,6 +128,21 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
 
   void _broadcastState(ja.PlaybackEvent event) {
     final playing = player.playing;
+    // #region agent log
+    DebugLog.log('audio_handler.dart:_broadcastState',
+        'publishing playbackState',
+        data: {
+          'playing': playing,
+          'processingState': player.processingState.toString(),
+          'currentIndex': event.currentIndex,
+          'hasMediaItem': mediaItem.value != null,
+          'mediaItemId': mediaItem.value?.id,
+          'mediaItemArtUri': mediaItem.value?.artUri?.toString(),
+          'queueLen': _queue.value.length,
+        },
+        hypothesisId: 'H3',
+        runId: 'run1');
+    // #endregion
     playbackState.add(playbackState.value.copyWith(
       controls: [
         const MediaControl(
@@ -186,18 +202,55 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
 
   Future<void> setQueue(List<Track> tracks, {int initialIndex = 0}) async {
     if (tracks.isEmpty) return;
+    // #region agent log
+    DebugLog.log('audio_handler.dart:setQueue', 'setQueue begin',
+        data: {
+          'trackCount': tracks.length,
+          'initialIndex': initialIndex,
+          'firstTitle': tracks.isEmpty ? null : tracks.first.title,
+          'firstUri': tracks.isEmpty ? null : tracks.first.uri,
+          'firstAlbumArtUri':
+              tracks.isEmpty ? null : tracks.first.albumArtUri,
+        },
+        hypothesisId: 'H4',
+        runId: 'run1');
+    // #endregion
     _queue.add(List.unmodifiable(tracks));
     final sources = tracks.map(_toAudioSource).toList();
     final idx = initialIndex.clamp(0, tracks.length - 1);
-    await player.setAudioSource(
-      ja.ConcatenatingAudioSource(children: sources),
-      initialIndex: idx,
-      preload: true,
-    );
+    try {
+      await player.setAudioSource(
+        ja.ConcatenatingAudioSource(children: sources),
+        initialIndex: idx,
+        preload: true,
+      );
+      // #region agent log
+      DebugLog.log('audio_handler.dart:setQueue', 'setAudioSource OK',
+          hypothesisId: 'H3', runId: 'run1');
+      // #endregion
+    } catch (e, s) {
+      // #region agent log
+      DebugLog.log('audio_handler.dart:setQueue', 'setAudioSource FAILED',
+          data: {'error': e.toString(), 'stack': s.toString()},
+          hypothesisId: 'H3',
+          runId: 'run1');
+      // #endregion
+      rethrow;
+    }
     queue.add(tracks.map(_toMediaItem).toList());
-    // Publish the current MediaItem immediately so the notification & lock
-    // screen populate without waiting for the index stream tick.
-    mediaItem.add(_toMediaItem(tracks[idx]));
+    final mi = _toMediaItem(tracks[idx]);
+    mediaItem.add(mi);
+    // #region agent log
+    DebugLog.log('audio_handler.dart:setQueue', 'mediaItem published',
+        data: {
+          'id': mi.id,
+          'title': mi.title,
+          'artUri': mi.artUri?.toString(),
+          'artUriScheme': mi.artUri?.scheme,
+        },
+        hypothesisId: 'H4',
+        runId: 'run1');
+    // #endregion
   }
 
   Future<void> appendToQueue(List<Track> tracks) async {
@@ -278,7 +331,19 @@ class GaayanaAudioHandler extends BaseAudioHandler with SeekHandler {
   // ---- Controls (called by lock-screen / Bluetooth / UI) -------------------
 
   @override
-  Future<void> play() => player.play();
+  Future<void> play() {
+    // #region agent log
+    DebugLog.log('audio_handler.dart:play', 'play() invoked',
+        data: {
+          'hasMediaItem': mediaItem.value != null,
+          'queueLen': _queue.value.length,
+          'processingState': player.processingState.toString(),
+        },
+        hypothesisId: 'H3',
+        runId: 'run1');
+    // #endregion
+    return player.play();
+  }
 
   @override
   Future<void> pause() => player.pause();

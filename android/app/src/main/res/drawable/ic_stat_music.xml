@@ -1,0 +1,20 @@
+<!--
+  Status-bar / notification small icon for audio_service.
+
+  Android requires the small icon for notifications to be a flat,
+  monochrome silhouette on a transparent background (the system tints
+  it automatically). Using an adaptive launcher icon here causes the
+  notification to render blank or to be dropped entirely on several
+  OEM skins (MIUI, OneUI, ColorOS), which is why the playback
+  notification was never showing up.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,3v10.55c-0.59,-0.34 -1.27,-0.55 -2,-0.55 -2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4V7h4V3h-6z"/>
+</vector>

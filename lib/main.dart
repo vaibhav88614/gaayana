@@ -10,6 +10,7 @@ import 'dart:io' show Platform;
 import 'app/app.dart';
 import 'core/audio/audio_handler.dart';
 import 'core/db/app_database.dart';
+import 'core/debug_log.dart';
 import 'core/providers.dart';
 
 /// App entry. Initialises Firebase, SQLite, SharedPreferences and the audio
@@ -22,6 +23,9 @@ import 'core/providers.dart';
 /// (auth screens will simply fail when tapped, with a clear error).
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // #region agent log
+  DebugLog.log('main.dart:main', 'app boot start', runId: 'run1');
+  // #endregion
 
   // ---- Firebase --------------------------------------------------------------
   var firebaseReady = false;
@@ -42,22 +46,63 @@ Future<void> main() async {
   final db = await AppDatabase.open();
 
   // ---- Audio background service ---------------------------------------------
-  final audioHandler = await AudioService.init<GaayanaAudioHandler>(
-    builder: GaayanaAudioHandler.new,
-    config: const AudioServiceConfig(
-      androidNotificationChannelId: 'com.gaayana.audio',
-      androidNotificationChannelName: 'Gaayana playback',
-      // Notification is dismissable when paused so users aren't stuck with a
-      // persistent badge. It re-appears as soon as playback resumes.
-      androidNotificationOngoing: false,
-      androidStopForegroundOnPause: false,
-      // Tapping the notification body returns to the running activity rather
-      // than launching a fresh one.
-      androidResumeOnClick: true,
-      androidShowNotificationBadge: true,
-      androidNotificationIcon: 'mipmap/ic_launcher',
-    ),
-  );
+  // Notes from the Android media-notification docs
+  // (https://developer.android.com/develop/ui/views/notifications and the
+  // foreground-services / media-playback rules introduced in Android 14):
+  //
+  //   * The small icon MUST be a flat, monochrome silhouette on a transparent
+  //     background. An adaptive launcher icon ("mipmap/ic_launcher") is
+  //     dropped silently by several OEM skins (MIUI, OneUI, ColorOS) which is
+  //     why the notification was never appearing.  We point at a dedicated
+  //     `drawable/ic_stat_music` instead.
+  //   * `androidNotificationOngoing: true` paired with
+  //     `androidStopForegroundOnPause: false` keeps the foreground-service
+  //     notification posted for the entire lifetime of a playback session,
+  //     which is what the system requires to surface the MediaStyle
+  //     lock-screen controls reliably.
+  //   * A short channel description helps the system settings page describe
+  //     the notification correctly so users don't disable it by accident.
+  // #region agent log
+  DebugLog.log('main.dart:main', 'AudioService.init begin',
+      data: {'icon': 'drawable/ic_stat_music', 'ongoing': true},
+      hypothesisId: 'H2',
+      runId: 'run1');
+  // #endregion
+  final GaayanaAudioHandler audioHandler;
+  try {
+    audioHandler = await AudioService.init<GaayanaAudioHandler>(
+      builder: GaayanaAudioHandler.new,
+      config: const AudioServiceConfig(
+        androidNotificationChannelId: 'com.gaayana.audio',
+        androidNotificationChannelName: 'Gaayana playback',
+        androidNotificationChannelDescription:
+            'Media controls for the currently playing song',
+        // Persistent MediaStyle notification while a song is playing.
+        // audio_service enforces the invariant
+        //   `!androidNotificationOngoing || androidStopForegroundOnPause`
+        // (see AudioServiceConfig assert). Setting `ongoing: true` therefore
+        // requires the default `stopForegroundOnPause: true`. When paused the
+        // notification becomes swipe-dismissable; it re-appears on resume.
+        androidNotificationOngoing: true,
+        androidResumeOnClick: true,
+        androidShowNotificationBadge: true,
+        // Monochrome status-bar icon — see comment block above.
+        androidNotificationIcon: 'drawable/ic_stat_music',
+      ),
+    );
+    // #region agent log
+    DebugLog.log('main.dart:main', 'AudioService.init OK',
+        hypothesisId: 'H2', runId: 'run1');
+    // #endregion
+  } catch (e, s) {
+    // #region agent log
+    DebugLog.log('main.dart:main', 'AudioService.init FAILED',
+        data: {'error': e.toString(), 'stack': s.toString()},
+        hypothesisId: 'H2',
+        runId: 'run1');
+    // #endregion
+    rethrow;
+  }
 
   // ---- First-launch permissions --------------------------------------------
   // Notification permission (Android 13+) — the lock-screen / shade media
@@ -68,7 +113,18 @@ Future<void> main() async {
   // Sequenced (await) rather than fire-and-forget so the second prompt is not
   // suppressed by the platform while the first is still on screen.
   try {
-    await Permission.notification.request();
+    final notif = await Permission.notification.request();
+    // #region agent log
+    DebugLog.log('main.dart:main', 'notification permission status',
+        data: {
+          'isGranted': notif.isGranted,
+          'isDenied': notif.isDenied,
+          'isPermanentlyDenied': notif.isPermanentlyDenied,
+          'raw': notif.toString(),
+        },
+        hypothesisId: 'H1',
+        runId: 'run1');
+    // #endregion
     if (Platform.isAndroid) {
       // Android 13+ uses READ_MEDIA_AUDIO; older releases use
       // READ_EXTERNAL_STORAGE. Try the modern permission first; if it isn't
@@ -114,7 +170,9 @@ Future<void> main() async {
         sharedPrefsProvider.overrideWithValue(prefs),
         firebaseReadyProvider.overrideWithValue(firebaseReady),
       ],
-      child: const GaayanaApp(),
+      // #region agent log
+      child: const DebugHudOverlay(child: GaayanaApp()),
+      // #endregion
     ),
   );
 }
